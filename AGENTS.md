@@ -27,7 +27,7 @@ Pytest is the test framework and coverage must remain at least 90%. Name tests a
 
 ## Commit & Pull Request Guidelines
 
-No Git history is available in this workspace, so use concise, imperative Conventional Commit messages, for example `feat: add tyre degradation model` or `fix: handle safety-car restart`. Pull requests should explain the problem and approach, list verification performed, link relevant issues, and include screenshots for UI changes. Call out schema, configuration, or data-source changes explicitly.
+Use concise, imperative Conventional Commit messages, following the established history; for example, `feat: add tyre degradation model` or `fix: handle safety-car restart`. Pull requests should explain the problem and approach, list verification performed, link relevant issues, and include screenshots for UI changes. Call out schema, configuration, or data-source changes explicitly.
 
 ## Security & Configuration
 
