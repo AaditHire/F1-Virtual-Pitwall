@@ -2,9 +2,10 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -18,7 +19,11 @@ class Settings(BaseSettings):
 
     fixture_path: Path = Path("data/samples/demo_race.json")
     knowledge_db: Path = Path("data/cache/knowledge.db")
-    cors_origins: tuple[str, ...] = ("http://localhost:3000",)
+    knowledge_path: Path = Path("knowledge/strategy-principles.md")
+    cors_origins: Annotated[tuple[str, ...], NoDecode] = (
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    )
     log_level: str = "INFO"
 
     @field_validator("cors_origins", mode="before")

@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from f1_pitwall.domain import RaceDataset, RaceSnapshot, StrategyAssessment
+from f1_pitwall.analytics import TrafficAnalyzer, TyreAnalyzer
+from f1_pitwall.domain import (
+    RaceDataset,
+    RaceSnapshot,
+    StrategyAssessment,
+    TrafficAnalysis,
+    TyreTrend,
+)
 from f1_pitwall.ingestion import create_demo_dataset, load_fixture
 from f1_pitwall.replay import ReplayBuilder
 from f1_pitwall.simulation import StrategyAdvisor
@@ -17,6 +24,8 @@ class PitWallService:
         self.dataset = dataset
         self._replay = ReplayBuilder(dataset)
         self._strategy = StrategyAdvisor(dataset)
+        self._tyres = TyreAnalyzer(dataset)
+        self._traffic = TrafficAnalyzer()
 
     @classmethod
     def from_fixture(cls, path: Path) -> PitWallService:
@@ -36,6 +45,7 @@ class PitWallService:
         self, cutoff_lap: int, driver_ids: set[str] | None = None
     ) -> list[dict[str, object]]:
         """Return visible lap-time series for dashboard charts."""
+        self._validate_cutoff(cutoff_lap)
         selected = {driver.upper() for driver in driver_ids} if driver_ids else None
         return [
             {
@@ -51,3 +61,26 @@ class PitWallService:
             and lap.lap_time_ms is not None
             and (selected is None or lap.driver_id in selected)
         ]
+
+    def tyre_trend(self, cutoff_lap: int, driver_id: str) -> TyreTrend:
+        """Estimate the selected driver's visible current-stint tyre trend."""
+        self._validate_cutoff(cutoff_lap)
+        return self._tyres.estimate(driver_id.upper(), cutoff_lap)
+
+    def traffic(
+        self,
+        cutoff_lap: int,
+        driver_id: str,
+        pit_loss_ms: int = 24_000,
+    ) -> TrafficAnalysis:
+        """Estimate the selected driver's green-flag pit rejoin traffic."""
+        return self._traffic.analyze(
+            self.snapshot(cutoff_lap),
+            driver_id.upper(),
+            pit_loss_ms,
+        )
+
+    def _validate_cutoff(self, cutoff_lap: int) -> None:
+        total_laps = self.dataset.metadata.total_laps
+        if not 1 <= cutoff_lap <= total_laps:
+            raise ValueError(f"cutoff_lap must be between 1 and {total_laps}")

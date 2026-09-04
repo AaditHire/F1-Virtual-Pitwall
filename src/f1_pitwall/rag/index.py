@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
@@ -31,16 +32,16 @@ class LocalKnowledgeIndex:
     def initialize(self) -> None:
         """Create the FTS table if it does not exist."""
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
-        with sqlite3.connect(self.database_path) as connection:
+        with closing(sqlite3.connect(self.database_path)) as connection, connection:
             connection.execute(
                 """
-                CREATE VIRTUAL TABLE IF NOT EXISTS knowledge USING fts5(
-                    source UNINDEXED,
-                    title,
-                    content,
-                    season UNINDEXED,
-                    available_at UNINDEXED
-                )
+                    CREATE VIRTUAL TABLE IF NOT EXISTS knowledge USING fts5(
+                        source UNINDEXED,
+                        title,
+                        content,
+                        season UNINDEXED,
+                        available_at UNINDEXED
+                    )
                 """
             )
 
@@ -55,7 +56,7 @@ class LocalKnowledgeIndex:
     ) -> None:
         """Index one document with provenance and availability metadata."""
         self.initialize()
-        with sqlite3.connect(self.database_path) as connection:
+        with closing(sqlite3.connect(self.database_path)) as connection, connection:
             connection.execute("DELETE FROM knowledge WHERE source = ?", (source,))
             connection.execute(
                 "INSERT INTO knowledge(source, title, content, season, available_at) "
@@ -117,7 +118,7 @@ class LocalKnowledgeIndex:
             """
             )
             parameters = [safe_query, limit]
-        with sqlite3.connect(self.database_path) as connection:
+        with closing(sqlite3.connect(self.database_path)) as connection:
             rows = connection.execute(sql, parameters).fetchall()
         return tuple(
             KnowledgeHit(

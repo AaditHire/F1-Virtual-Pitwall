@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import date
 from typing import Annotated
 from uuid import uuid4
 
@@ -18,9 +20,11 @@ from f1_pitwall.agents.advisor import AgentUnavailableError, get_agent_advice
 from f1_pitwall.api.schemas import AgentAdviceRequest, RadioRequest
 from f1_pitwall.application import PitWallService
 from f1_pitwall.config import Settings, get_settings
+from f1_pitwall.evaluations import run_evaluations
 from f1_pitwall.logging import configure_logging
 from f1_pitwall.radio import classify_radio
 from f1_pitwall.rag import LocalKnowledgeIndex
+from f1_pitwall.weather import OpenMeteoClient
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +49,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.service = PitWallService.from_fixture(resolved.fixture_path)
-        app.state.knowledge = LocalKnowledgeIndex(resolved.knowledge_db)
+        knowledge = LocalKnowledgeIndex(resolved.knowledge_db)
+        knowledge.initialize()
+        if resolved.knowledge_path.exists():
+            knowledge.add_document(
+                source=str(resolved.knowledge_path),
+                title="Race Strategy Principles",
+                content=resolved.knowledge_path.read_text(encoding="utf-8"),
+            )
+        app.state.knowledge = knowledge
         yield
 
     app = FastAPI(
@@ -88,6 +100,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "drivers": list(dataset.drivers.values()),
         }
 
+    @app.get("/api/v1/capabilities", tags=["operations"])
+    def capabilities() -> dict[str, object]:
+        return {
+            "replay": "ready",
+            "strategy": "ready",
+            "tyres": "ready",
+            "traffic": "ready",
+            "radio": "ready",
+            "knowledge": "ready",
+            "weather": "ready",
+            "agent": "ready" if os.getenv("OPENAI_API_KEY") else "requires_key",
+        }
+
     @app.get("/api/v1/snapshot/{lap}", tags=["replay"])
     def snapshot(lap: int, pitwall: ServiceDep) -> object:
         return pitwall.snapshot(lap)
@@ -109,6 +134,38 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         selected = set(drivers.split(",")) if drivers else None
         return pitwall.lap_times(lap, selected)
 
+    @app.get("/api/v1/tyres/{driver_id}/{lap}", tags=["strategy"])
+    def tyre_trend(driver_id: str, lap: int, pitwall: ServiceDep) -> object:
+        return pitwall.tyre_trend(lap, driver_id)
+
+    @app.get("/api/v1/traffic/{driver_id}/{lap}", tags=["strategy"])
+    def traffic(
+        driver_id: str,
+        lap: int,
+        pitwall: ServiceDep,
+        pit_loss_ms: Annotated[int, Query(ge=1_000, le=60_000)] = 24_000,
+    ) -> object:
+        return pitwall.traffic(lap, driver_id, pit_loss_ms)
+
+    @app.get("/api/v1/trace/{driver_id}/{lap}", tags=["agents"])
+    def trace(driver_id: str, lap: int, pitwall: ServiceDep) -> dict[str, object]:
+        snapshot = pitwall.snapshot(lap)
+        assessment = pitwall.strategy(lap, driver_id)
+        return {
+            "session_id": snapshot.session_id,
+            "driver_id": driver_id.upper(),
+            "cutoff_lap": lap,
+            "snapshot_hash": snapshot.snapshot_hash,
+            "max_source_lap": assessment.max_source_lap,
+            "tool_sequence": ["get_race_state", "compare_strategy"],
+            "evidence": assessment.evidence,
+            "agent_status": "ready" if os.getenv("OPENAI_API_KEY") else "requires_key",
+        }
+
+    @app.get("/api/v1/evaluations", tags=["operations"])
+    def evaluations(pitwall: ServiceDep) -> object:
+        return run_evaluations(pitwall)
+
     @app.post("/api/v1/radio/classify", tags=["intelligence"])
     def radio(payload: RadioRequest) -> object:
         return classify_radio(payload.text)
@@ -120,6 +177,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         limit: Annotated[int, Query(ge=1, le=20)] = 5,
     ) -> object:
         return index.search(query, limit=limit)
+
+    @app.get("/api/v1/weather", tags=["intelligence"])
+    async def weather(
+        latitude: Annotated[float, Query(ge=-90, le=90)],
+        longitude: Annotated[float, Query(ge=-180, le=180)],
+        day: date,
+    ) -> object:
+        try:
+            return await OpenMeteoClient().fetch_day(
+                latitude=latitude,
+                longitude=longitude,
+                day=day,
+            )
+        except Exception as error:
+            logger.warning("weather provider unavailable", exc_info=error)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Historical weather provider is temporarily unavailable.",
+            ) from error
 
     @app.post("/api/v1/agent/advice", tags=["agents"])
     async def agent_advice(

@@ -28,3 +28,12 @@ def test_traffic_analyzer_predicts_rejoin(service: PitWallService) -> None:
 def test_traffic_analyzer_rejects_missing_driver(service: PitWallService) -> None:
     with pytest.raises(ValueError, match="not present"):
         TrafficAnalyzer().analyze(service.snapshot(12), "XXX")
+
+
+def test_service_analysis_facade_validates_cutoffs(service: PitWallService) -> None:
+    assert service.tyre_trend(12, "nor").max_source_lap <= 12
+    assert service.traffic(12, "nor").max_source_lap <= 12
+    with pytest.raises(ValueError, match="between 1 and"):
+        service.lap_times(99)
+    with pytest.raises(ValueError, match="between 1 and"):
+        service.tyre_trend(0, "NOR")

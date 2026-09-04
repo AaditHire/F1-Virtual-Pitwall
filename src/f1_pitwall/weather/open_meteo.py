@@ -1,6 +1,6 @@
 """No-key historical weather adapter for Open-Meteo."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import httpx
 from pydantic import BaseModel, ConfigDict
@@ -51,7 +51,7 @@ class OpenMeteoClient:
             hourly = response.json()["hourly"]
             return tuple(
                 WeatherObservation(
-                    observed_at=datetime.fromisoformat(timestamp),
+                    observed_at=datetime.fromisoformat(timestamp).replace(tzinfo=UTC),
                     temperature_c=hourly["temperature_2m"][index],
                     precipitation_mm=hourly["precipitation"][index],
                     wind_speed_kmh=hourly["wind_speed_10m"][index],
