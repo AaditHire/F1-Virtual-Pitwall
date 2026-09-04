@@ -1,5 +1,9 @@
 # V1 Architecture Specification
 
+> Historical decision record: this document defined the original deterministic-core milestone.
+> The repository now includes the later interfaces described in `architecture.md`; the cutoff and
+> domain invariants below remain authoritative.
+
 **Status:** Accepted for implementation  
 **Date:** 2026-09-01  
 **Scope:** Offline, deterministic replay only

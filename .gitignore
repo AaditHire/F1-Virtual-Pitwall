@@ -11,12 +11,16 @@ coverage.xml
 htmlcov/
 .mypy_cache/
 .pytest_cache/
+.pytest-tmp/
 .ruff_cache/
 build/
 dist/
 
 # Local configuration and secrets
 .env
+.env.local
+frontend/.next/
+frontend/node_modules/
 .env.*
 !.env.example
 
@@ -31,4 +35,3 @@ fastf1_cache/
 .vscode/
 .DS_Store
 Thumbs.db
-

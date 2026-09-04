@@ -4,7 +4,8 @@
 
 The project uses a Python `src/` layout. Keep the root limited to project-wide configuration and documentation:
 
-- `src/f1_pitwall/` contains domain, ingestion, replay, analytics, simulation, and application packages.
+- `src/f1_pitwall/` contains the domain core, data adapters, replay, analytics, API, MCP, and agents.
+- `frontend/` is the Next.js dashboard; UI code lives in `app/` and `components/`.
 - `tests/unit/` contains isolated tests; `tests/integration/` covers offline flows across boundaries.
 - `docs/` contains architecture decisions and data-contract guidance.
 - `data/` may contain small redistributable samples; raw data and caches stay untracked.
@@ -13,7 +14,7 @@ Prefer small, feature-focused modules over a single large pit-wall service. Do n
 
 ## Build, Test, and Development Commands
 
-Create a virtual environment, install `requirements-dev.lock`, then install the package with `python -m pip install --no-deps -e .`. Run `python -m pytest` for tests, `python -m ruff check .` for linting, `python -m ruff format --check .` for formatting, `python -m mypy src tests` for static typing, and `python -m build` to verify packaging.
+Create a virtual environment, install `requirements-dev.lock`, then install the package with `python -m pip install --no-deps -e .`. Run `pitwall serve` for the API and `npm run dev` in `frontend/` for the dashboard. Use `python -m pytest`, `python -m ruff check .`, `python -m mypy src tests`, and `npm run build --prefix frontend` as quality gates.
 
 Before submitting changes, use `git status` to confirm the intended files and `git diff --check` to catch whitespace errors.
 

@@ -1,0 +1,17 @@
+services:
+  api:
+    build: .
+    environment:
+      PITWALL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8000:8000"
+
+  dashboard:
+    build:
+      context: frontend
+    environment:
+      NEXT_PUBLIC_PITWALL_API_URL: http://localhost:8000
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
