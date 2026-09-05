@@ -25,6 +25,15 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3000",
     )
     log_level: str = "INFO"
+    jolpica_url: str = "https://api.jolpi.ca/ergast/f1"
+    news_feeds: Annotated[tuple[str, ...], NoDecode] = ()
+
+    @field_validator("news_feeds", mode="before")
+    @classmethod
+    def parse_feeds(cls, value: object) -> object:
+        if isinstance(value, str):
+            return tuple(part.strip() for part in value.split(",") if part.strip())
+        return value
 
     @field_validator("cors_origins", mode="before")
     @classmethod

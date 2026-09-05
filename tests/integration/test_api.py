@@ -16,23 +16,23 @@ def test_http_replay_flow(fixture_path: Path, tmp_path: Path) -> None:
         assert client.get("/health").json() == {"status": "ok"}
         session = client.get("/api/v1/session")
         assert session.status_code == 200
-        assert len(session.json()["drivers"]) == 6
+        assert len(session.json()["drivers"]) == len(app.state.service.dataset.drivers)
         snapshot = client.get("/api/v1/snapshot/12")
         assert snapshot.status_code == 200
         assert snapshot.headers["x-request-id"]
-        strategy = client.get("/api/v1/strategy/NOR/12")
+        strategy = client.get("/api/v1/strategy/D001/12")
         assert strategy.status_code == 200
         assert strategy.json()["max_source_lap"] <= 12
-        laps = client.get("/api/v1/lap-times/12?drivers=NOR,RUS")
-        assert {item["driver_id"] for item in laps.json()} == {"NOR", "RUS"}
+        laps = client.get("/api/v1/lap-times/12?drivers=D001,D002")
+        assert {item["driver_id"] for item in laps.json()} == {"D001", "D002"}
         assert client.get("/api/v1/lap-times/99").status_code == 422
-        tyres = client.get("/api/v1/tyres/NOR/12")
+        tyres = client.get("/api/v1/tyres/D001/12")
         assert tyres.status_code == 200
         assert tyres.json()["max_source_lap"] <= 12
-        traffic = client.get("/api/v1/traffic/NOR/12")
+        traffic = client.get("/api/v1/traffic/D001/12")
         assert traffic.status_code == 200
         assert traffic.json()["max_source_lap"] <= 12
-        trace = client.get("/api/v1/trace/NOR/12")
+        trace = client.get("/api/v1/trace/D001/12")
         assert trace.status_code == 200
         assert trace.json()["max_source_lap"] <= 12
         assert all(result["passed"] for result in client.get("/api/v1/evaluations").json())
@@ -49,7 +49,7 @@ def test_http_validation_and_optional_agent(fixture_path: Path, tmp_path: Path) 
         assert knowledge.json()[0]["title"] == "Race Strategy Principles"
         response = client.post(
             "/api/v1/agent/advice",
-            json={"lap": 12, "driver_id": "NOR", "question": "Pit now?"},
+            json={"lap": 12, "driver_id": "D001", "question": "Pit now?"},
         )
         assert response.status_code == 503
 

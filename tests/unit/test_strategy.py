@@ -5,8 +5,8 @@ from f1_pitwall.domain import StrategyAction
 
 
 def test_strategy_is_auditable(service: PitWallService) -> None:
-    assessment = service.strategy(12, "nor")
-    assert assessment.driver_id == "NOR"
+    assessment = service.strategy(12, "d001")
+    assert assessment.driver_id == "D001"
     assert assessment.preferred_action in {
         StrategyAction.PIT_NEXT_LAP,
         StrategyAction.STAY_OUT_ONE_LAP,
@@ -18,4 +18,4 @@ def test_strategy_is_auditable(service: PitWallService) -> None:
 
 def test_strategy_requires_valid_horizon(service: PitWallService) -> None:
     with pytest.raises(ValueError, match="at least 3"):
-        service._strategy.assess(service.snapshot(12), "NOR", horizon_laps=2)
+        service._strategy.assess(service.snapshot(12), "D001", horizon_laps=2)

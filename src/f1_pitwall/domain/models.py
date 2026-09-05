@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class FrozenModel(BaseModel):
     """Base model for deterministic value objects."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="forbid", allow_inf_nan=False)
 
 
 class Compound(StrEnum):
@@ -30,6 +30,9 @@ class DriverStatus(StrEnum):
     RUNNING = "RUNNING"
     RETIRED = "RETIRED"
     UNKNOWN = "UNKNOWN"
+    DNS = "DNS"
+    DSQ = "DSQ"
+    FINISHED = "FINISHED"
 
 
 class StrategyAction(StrEnum):
@@ -65,7 +68,10 @@ class RaceMetadata(FrozenModel):
 class DriverInfo(FrozenModel):
     """Stable identity information for an entrant."""
 
-    driver_id: str = Field(min_length=2, max_length=8)
+    driver_id: str = Field(min_length=1, max_length=128)
+    abbreviation: str | None = None
+    team_id: str | None = None
+    grid_position: int | None = Field(default=None, ge=0)
     full_name: str = Field(min_length=1)
     team_name: str = Field(min_length=1)
     team_color: str = Field(pattern=r"^[0-9A-Fa-f]{6}$")
@@ -74,7 +80,7 @@ class DriverInfo(FrozenModel):
 class LapRecord(FrozenModel):
     """Normalized observation for one driver's completed lap."""
 
-    driver_id: str = Field(min_length=2, max_length=8)
+    driver_id: str = Field(min_length=1, max_length=128)
     lap_number: int = Field(gt=0)
     source_lap: int = Field(gt=0)
     position: int | None = Field(default=None, gt=0)
@@ -87,6 +93,7 @@ class LapRecord(FrozenModel):
     pit_out: bool = False
     track_status: str = ""
     is_accurate: bool = False
+    observed_status: DriverStatus | None = None
 
     @model_validator(mode="after")
     def source_matches_observation(self) -> LapRecord:
@@ -96,17 +103,30 @@ class LapRecord(FrozenModel):
         return self
 
 
+class StatusRecord(FrozenModel):
+    """Explicit status known by a leader-lap cutoff; can represent DNS before any lap."""
+
+    driver_id: str
+    source_lap: int = Field(ge=0)
+    status: DriverStatus
+
+
 class RaceDataset(FrozenModel):
     """Versioned normalized race data used by replay."""
 
     metadata: RaceMetadata
     drivers: dict[str, DriverInfo]
     laps: tuple[LapRecord, ...]
+    statuses: tuple[StatusRecord, ...] = ()
 
     @model_validator(mode="after")
     def validate_dataset(self) -> RaceDataset:
         """Reject ambiguous records and unknown driver references."""
         seen: set[tuple[str, int]] = set()
+        if any(key != info.driver_id for key, info in self.drivers.items()):
+            raise ValueError("driver dictionary keys must match stable driver IDs")
+        if any(record.driver_id not in self.drivers for record in self.statuses):
+            raise ValueError("status references unknown driver")
         for lap in self.laps:
             if lap.driver_id not in self.drivers:
                 raise ValueError(f"lap references unknown driver {lap.driver_id}")
@@ -145,12 +165,16 @@ class DriverState(FrozenModel):
     pit_stop_count: int = Field(ge=0)
     last_lap_time_ms: int | None
     max_source_lap: int
+    grid_position: int | None = None
+    recent_pace_ms: int | None = None
+    rolling_pace_ms: int | None = None
+    nearby_driver_ids: tuple[str, ...] = ()
 
 
 class RaceSnapshot(FrozenModel):
     """Immutable race state at the end of a completed lap."""
 
-    schema_version: str = "1.0"
+    schema_version: str = "2.0"
     data_version: str
     session_id: str
     cutoff_lap: int = Field(gt=0)
@@ -170,6 +194,9 @@ class TyreTrend(FrozenModel):
     pace_ms: int | None
     degradation_ms_per_lap: float | None
     max_source_lap: int
+    confidence: float = Field(default=0, ge=0, le=1)
+    pace_loss_ms: int | None = None
+    estimated_remaining_life_laps: int | None = None
 
 
 class TrafficAnalysis(FrozenModel):

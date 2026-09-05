@@ -1,6 +1,6 @@
 """Green-flag pit rejoin and traffic analysis."""
 
-from f1_pitwall.domain import RaceSnapshot, TrafficAnalysis, TrafficRisk
+from f1_pitwall.domain import DriverStatus, RaceSnapshot, TrafficAnalysis, TrafficRisk
 
 
 class TrafficAnalyzer:
@@ -21,13 +21,23 @@ class TrafficAnalyzer:
         )
         if target is None:
             raise ValueError(f"driver {driver_id} is not present in the snapshot")
+        active = tuple(
+            driver
+            for driver in snapshot.drivers
+            if driver.status not in {DriverStatus.RETIRED, DriverStatus.DNS, DriverStatus.DSQ}
+        )
+        active_ids = {driver.driver_id for driver in active}
         if (
-            target.gap_to_leader_ms is None
+            target.driver_id not in active_ids
+            or target.gap_to_leader_ms is None
             or any(
                 driver.gap_to_leader_ms is None or driver.max_source_lap < snapshot.cutoff_lap
-                for driver in snapshot.drivers
+                for driver in active
             )
-            or any(warning.code == "NO_VISIBLE_LAP" for warning in snapshot.warnings)
+            or any(
+                warning.code == "NO_VISIBLE_LAP" and warning.driver_id in active_ids
+                for warning in snapshot.warnings
+            )
         ):
             return TrafficAnalysis(
                 driver_id=driver_id,
@@ -41,7 +51,7 @@ class TrafficAnalyzer:
         projected_gap = target.gap_to_leader_ms + pit_loss_ms
         rivals = [
             driver
-            for driver in snapshot.drivers
+            for driver in active
             if driver.driver_id != driver_id and driver.gap_to_leader_ms is not None
         ]
         predicted_position = 1 + sum(

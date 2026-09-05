@@ -7,6 +7,7 @@ import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import date
+from pathlib import Path
 from typing import Annotated
 from uuid import uuid4
 
@@ -17,10 +18,15 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
 from f1_pitwall.agents.advisor import AgentUnavailableError, get_agent_advice
+from f1_pitwall.api.platform import router as platform_router
 from f1_pitwall.api.schemas import AgentAdviceRequest, RadioRequest
 from f1_pitwall.application import PitWallService
 from f1_pitwall.config import Settings, get_settings
 from f1_pitwall.evaluations import run_evaluations
+from f1_pitwall.ingestion.fastf1_source import FastF1Source
+from f1_pitwall.intelligence.news import RssNewsProvider
+from f1_pitwall.intelligence.provider import JolpicaProvider, ProviderUnavailableError
+from f1_pitwall.intelligence.service import IntelligenceService
 from f1_pitwall.logging import configure_logging
 from f1_pitwall.radio import classify_radio
 from f1_pitwall.rag import LocalKnowledgeIndex
@@ -58,14 +64,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 content=resolved.knowledge_path.read_text(encoding="utf-8"),
             )
         app.state.knowledge = knowledge
-        yield
+        provider = JolpicaProvider(resolved.jolpica_url)
+        news = RssNewsProvider(
+            resolved.news_feeds,
+            tags={
+                "driver": {
+                    info.full_name: info.driver_id
+                    for info in app.state.service.dataset.drivers.values()
+                },
+                "team": {
+                    info.team_name: info.team_id or info.team_name
+                    for info in app.state.service.dataset.drivers.values()
+                },
+            },
+        )
+        app.state.intelligence = IntelligenceService(
+            provider, FastF1Source(Path("data/cache/fastf1"))
+        )
+        app.state.news = news
+        try:
+            yield
+        finally:
+            provider.close()
+            news.close()
 
     app = FastAPI(
         title="F1 Virtual Pit Wall API",
-        version="0.1.0",
+        version="0.2.0",
         description="Cutoff-safe historical Formula 1 replay and strategy analysis.",
         lifespan=lifespan,
     )
+    app.include_router(platform_router)
+
+    @app.exception_handler(ProviderUnavailableError)
+    async def provider_unavailable(
+        request: Request, error: ProviderUnavailableError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503, content={"detail": str(error)}, headers={"Retry-After": "60"}
+        )
+
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(resolved.cors_origins),

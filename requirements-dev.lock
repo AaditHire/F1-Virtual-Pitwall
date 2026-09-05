@@ -267,3 +267,6 @@ wheel==0.48.0
 # The following packages are considered to be unsafe in a requirements file:
 # pip
 # setuptools
+
+defusedxml==0.7.1
+    # via f1-virtual-pitwall

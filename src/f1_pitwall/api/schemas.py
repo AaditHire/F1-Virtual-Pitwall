@@ -17,5 +17,5 @@ class AgentAdviceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     lap: int = Field(gt=0)
-    driver_id: str = Field(min_length=2, max_length=8)
+    driver_id: str = Field(min_length=1, max_length=128)
     question: str = Field(default="What should we do next?", min_length=1, max_length=1_000)

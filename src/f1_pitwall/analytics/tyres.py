@@ -1,5 +1,7 @@
 """Transparent tyre pace and degradation estimates."""
 
+from statistics import median
+
 from f1_pitwall.domain import RaceDataset, TyreTrend
 
 
@@ -37,6 +39,14 @@ class TyreAnalyzer:
             and not lap.pit_out
             and lap.track_status in {"", "1"}
         ][-window:]
+        if samples:
+            center = median(lap.lap_time_ms or 0 for lap in samples)
+            deviation = median(abs((lap.lap_time_ms or 0) - center) for lap in samples)
+            samples = [
+                lap
+                for lap in samples
+                if abs((lap.lap_time_ms or 0) - center) <= max(2000, 4 * deviation)
+            ]
 
         if not samples:
             return TyreTrend(
@@ -67,6 +77,13 @@ class TyreAnalyzer:
             pace_ms=pace,
             degradation_ms_per_lap=round(slope, 2) if len(samples) >= 3 else None,
             max_source_lap=max(lap.source_lap for lap in samples),
+            confidence=min(0.9, len(samples) / 10),
+            pace_loss_ms=round(max(0, slope) * (latest.tyre_age_laps or 0)),
+            estimated_remaining_life_laps=(
+                max(0, int(3000 / slope) - (latest.tyre_age_laps or 0))
+                if len(samples) >= 3 and slope > 0
+                else None
+            ),
         )
 
     @staticmethod

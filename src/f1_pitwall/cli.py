@@ -35,6 +35,7 @@ def _parser() -> argparse.ArgumentParser:
     fetch.add_argument("--year", type=int, required=True)
     fetch.add_argument("--event", required=True)
     fetch.add_argument("--output", type=Path, required=True)
+    fetch.add_argument("--total-laps", type=int, help="Explicit pre-race scheduled distance")
     index = commands.add_parser("index-knowledge", help="Index a local Markdown document")
     index.add_argument("path", type=Path)
     return parser
@@ -70,7 +71,9 @@ def main() -> NoReturn:
         _print([result.model_dump() for result in results])
         raise SystemExit(0 if all(result.passed for result in results) else 1)
     elif args.command == "fetch":
-        dataset = FastF1Source(Path("data/cache/fastf1")).fetch(args.year, args.event)
+        dataset = FastF1Source(Path("data/cache/fastf1")).fetch(
+            args.year, args.event, scheduled_laps=args.total_laps
+        )
         write_fixture(dataset, args.output)
         _print({"written": str(args.output), "laps": len(dataset.laps)})
     elif args.command == "index-knowledge":

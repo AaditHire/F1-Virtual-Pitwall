@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from statistics import median
 
 from f1_pitwall.domain import (
+    Compound,
     DataQualityWarning,
     DriverState,
     DriverStatus,
@@ -60,7 +62,9 @@ class ReplayBuilder:
             interval = self._gap(record, ahead)
             completed_delta = cutoff_lap - record.lap_number
             # Missing laps cannot establish a retirement without a status observation.
-            status = DriverStatus.UNKNOWN if completed_delta > 0 else DriverStatus.RUNNING
+            status = record.observed_status or (
+                DriverStatus.UNKNOWN if completed_delta > 0 else DriverStatus.RUNNING
+            )
             if completed_delta > 0:
                 warnings.append(
                     DataQualityWarning(
@@ -81,6 +85,20 @@ class ReplayBuilder:
             pit_stop_count = sum(
                 1 for lap in visible if lap.driver_id == record.driver_id and lap.pit_in
             )
+            clean = sorted(
+                (
+                    lap
+                    for lap in visible
+                    if lap.driver_id == record.driver_id
+                    and lap.is_accurate
+                    and not lap.pit_in
+                    and not lap.pit_out
+                    and lap.track_status in {"", "1"}
+                    and lap.lap_time_ms is not None
+                ),
+                key=lambda lap: lap.lap_number,
+            )
+            times = [lap.lap_time_ms or 0 for lap in clean[-5:]]
             states.append(
                 DriverState(
                     driver_id=record.driver_id,
@@ -100,11 +118,71 @@ class ReplayBuilder:
                     pit_stop_count=pit_stop_count,
                     last_lap_time_ms=record.lap_time_ms,
                     max_source_lap=record.source_lap,
+                    grid_position=info.grid_position,
+                    recent_pace_ms=times[-1] if times else None,
+                    rolling_pace_ms=round(median(times)) if times else None,
                 )
             )
             ahead = record
 
         unseen = sorted(set(self._dataset.drivers) - set(latest))
+        for driver_id in unseen:
+            info = self._dataset.drivers[driver_id]
+            states.append(
+                DriverState(
+                    driver_id=driver_id,
+                    full_name=info.full_name,
+                    team_name=info.team_name,
+                    team_color=info.team_color,
+                    grid_position=info.grid_position,
+                    status=DriverStatus.UNKNOWN,
+                    position=None,
+                    completed_laps=0,
+                    laps_behind=cutoff_lap,
+                    elapsed_time_ms=None,
+                    gap_to_leader_ms=None,
+                    interval_ahead_ms=None,
+                    compound=Compound.UNKNOWN,
+                    tyre_age_laps=None,
+                    stint=None,
+                    pit_stop_count=0,
+                    last_lap_time_ms=None,
+                    max_source_lap=0,
+                )
+            )
+        states = [
+            state.model_copy(
+                update={
+                    "nearby_driver_ids": tuple(
+                        other.driver_id
+                        for other in states
+                        if other.driver_id != state.driver_id
+                        and state.gap_to_leader_ms is not None
+                        and other.gap_to_leader_ms is not None
+                        and abs(other.gap_to_leader_ms - state.gap_to_leader_ms) <= 3000
+                    )
+                }
+            )
+            for state in states
+        ]
+        statuses = {
+            record.driver_id: record
+            for record in sorted(self._dataset.statuses, key=lambda record: record.source_lap)
+            if record.source_lap <= cutoff_lap
+        }
+        states = [
+            state.model_copy(
+                update={
+                    "status": statuses[state.driver_id].status,
+                    "max_source_lap": max(
+                        state.max_source_lap, statuses[state.driver_id].source_lap
+                    ),
+                }
+            )
+            if state.driver_id in statuses
+            else state
+            for state in states
+        ]
         warnings.extend(
             DataQualityWarning(
                 code="NO_VISIBLE_LAP",

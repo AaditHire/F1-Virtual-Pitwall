@@ -7,7 +7,7 @@ from f1_pitwall.ingestion import create_demo_dataset
 
 def test_lap_record_rejects_future_source() -> None:
     with pytest.raises(ValidationError, match="source_lap must equal"):
-        LapRecord(driver_id="NOR", lap_number=3, source_lap=4)
+        LapRecord(driver_id="D001", lap_number=3, source_lap=4)
 
 
 def test_dataset_rejects_unknown_driver() -> None:

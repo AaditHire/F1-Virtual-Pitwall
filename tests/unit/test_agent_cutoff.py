@@ -19,11 +19,11 @@ def test_agent_tools_cannot_request_future_laps(
     async def run(agent: Any, prompt: str) -> SimpleNamespace:
         state, strategy = agent.tools
         assert '"cutoff_lap":12' in state(12)
-        assert '"cutoff_lap":11' in strategy(11, "NOR")
+        assert '"cutoff_lap":11' in strategy(11, "D001")
         with pytest.raises(ValueError, match="authorized lap 12"):
             state(13)
         with pytest.raises(ValueError, match="authorized lap 12"):
-            strategy(30, "NOR")
+            strategy(30, "D001")
         return SimpleNamespace(final_output="Cutoff enforced")
 
     sdk = SimpleNamespace(
@@ -33,5 +33,5 @@ def test_agent_tools_cannot_request_future_laps(
     )
     monkeypatch.setenv("OPENAI_API_KEY", "offline-test-placeholder")
     monkeypatch.setitem(sys.modules, "agents", sdk)
-    result = asyncio.run(get_agent_advice(service, lap=12, driver_id="NOR", question="Pit?"))
+    result = asyncio.run(get_agent_advice(service, lap=12, driver_id="D001", question="Pit?"))
     assert result["advice"] == "Cutoff enforced"
