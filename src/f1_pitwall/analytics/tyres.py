@@ -11,11 +11,18 @@ class TyreAnalyzer:
 
     def estimate(self, driver_id: str, cutoff_lap: int, window: int = 8) -> TyreTrend:
         """Fit a least-squares trend to the current stint without future laps."""
-        visible = [
-            lap
-            for lap in self._dataset.laps
-            if lap.driver_id == driver_id and lap.lap_number <= cutoff_lap
-        ]
+        if window <= 0:
+            raise ValueError("window must be positive")
+        if not 1 <= cutoff_lap <= self._dataset.metadata.total_laps:
+            raise ValueError("cutoff_lap is outside this race")
+        visible = sorted(
+            [
+                lap
+                for lap in self._dataset.laps
+                if lap.driver_id == driver_id and lap.lap_number <= cutoff_lap
+            ],
+            key=lambda lap: lap.lap_number,
+        )
         if not visible:
             raise ValueError(f"no visible laps for {driver_id} at lap {cutoff_lap}")
 
@@ -45,7 +52,10 @@ class TyreAnalyzer:
         pace = round(sum(lap.lap_time_ms or 0 for lap in samples) / len(samples))
         slope = self._linear_slope(
             [
-                (float(lap.tyre_age_laps or index), float(lap.lap_time_ms or 0))
+                (
+                    float(lap.tyre_age_laps if lap.tyre_age_laps is not None else index),
+                    float(lap.lap_time_ms or 0),
+                )
                 for index, lap in enumerate(samples)
             ]
         )

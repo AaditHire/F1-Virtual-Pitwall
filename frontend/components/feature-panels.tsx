@@ -98,36 +98,49 @@ export function StrategyKnowledge() {
   const [query, setQuery] = useState("undercut tyre degradation");
   const [hits, setHits] = useState<KnowledgeHit[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [searched, setSearched] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    setPending(true);
+    setHits([]);
     try {
       setHits(await pitwallRequest<KnowledgeHit[]>(`/knowledge/search?query=${encodeURIComponent(query)}`));
+      setSearched(true);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Knowledge search failed");
+    } finally {
+      setPending(false);
     }
   }
 
   return (
     <article className="feature-card panel">
       <div className="section-heading"><div><span>HISTORICAL RAG</span><h2>Strategy knowledge</h2></div><Search /></div>
-      <form className="search-form" onSubmit={submit}><label className="sr-only" htmlFor="knowledge-query">Knowledge query</label><input id="knowledge-query" value={query} onChange={(event) => setQuery(event.target.value)} required /><button>SEARCH</button></form>
+      <form className="search-form" onSubmit={submit}><label className="sr-only" htmlFor="knowledge-query">Knowledge query</label><input id="knowledge-query" value={query} onChange={(event) => setQuery(event.target.value)} maxLength={200} required disabled={pending} /><button disabled={pending}>{pending ? "SEARCHING…" : "SEARCH"}</button></form>
       {error && <p className="inline-error">{error}</p>}
-      <div className="knowledge-results">{hits.length ? hits.map((hit) => <article key={hit.source}><strong>{hit.title}</strong><p>{hit.content.slice(0, 240)}{hit.content.length > 240 ? "…" : ""}</p><small>{hit.source}</small></article>) : <p>Search the local, source-attributed strategy index.</p>}</div>
+      <div className="knowledge-results" aria-live="polite">{hits.length ? hits.map((hit) => <article key={hit.source}><strong>{hit.title}</strong><p>{hit.content.slice(0, 240)}{hit.content.length > 240 ? "…" : ""}</p><details><summary>Read source</summary><p className="source-content">{hit.content}</p></details><small>{hit.source}</small></article>) : <p>{pending ? "Searching local sources…" : searched ? "No matching sources. Try a broader term such as undercut or traffic." : "Search the local, source-attributed strategy index."}</p>}</div>
     </article>
   );
 }
 
 export function WeatherPanel() {
+  const [latitude, setLatitude] = useState("26.0325");
+  const [longitude, setLongitude] = useState("50.5106");
+  const [day, setDay] = useState("2024-03-02");
   const [observations, setObservations] = useState<WeatherObservation[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  async function loadWeather() {
+  async function loadWeather(event: FormEvent) {
+    event.preventDefault();
     setPending(true);
+    setObservations([]);
     try {
-      setObservations(await pitwallRequest<WeatherObservation[]>("/weather?latitude=26.0325&longitude=50.5106&day=2024-03-02"));
+      const params = new URLSearchParams({ latitude, longitude, day });
+      setObservations(await pitwallRequest<WeatherObservation[]>(`/weather?${params}`));
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Weather lookup failed");
@@ -143,10 +156,11 @@ export function WeatherPanel() {
   return (
     <section className="feature-grid">
       <article className="feature-card panel feature-wide">
-        <div className="section-heading"><div><span>FREE HISTORICAL FEED</span><h1>Bahrain race-day weather</h1></div><CloudRain /></div>
-        <div className="feature-action"><p>Load hourly observations for Bahrain International Circuit on 2 March 2024 from Open-Meteo.</p><button onClick={() => void loadWeather()} disabled={pending}>{pending ? "LOADING…" : "LOAD WEATHER"}</button></div>
+        <div className="section-heading"><div><span>HISTORICAL WEATHER EXPLORER</span><h1>Circuit weather</h1></div><CloudRain /></div>
+        <p className="feature-note">Explore a circuit and date. Defaults are Bahrain, 2 March 2024. This full-day archive is separate from replay and is never used as future strategy evidence.</p>
+        <form className="weather-form" onSubmit={loadWeather}><label>Latitude<input aria-label="Latitude" type="number" step="any" min={-90} max={90} required value={latitude} onChange={(event) => { setLatitude(event.target.value); setObservations([]); }} disabled={pending} /></label><label>Longitude<input aria-label="Longitude" type="number" step="any" min={-180} max={180} required value={longitude} onChange={(event) => { setLongitude(event.target.value); setObservations([]); }} disabled={pending} /></label><label>Date<input aria-label="Weather date" type="date" required value={day} onChange={(event) => { setDay(event.target.value); setObservations([]); }} disabled={pending} /></label><button disabled={pending}>{pending ? "LOADING…" : "LOAD WEATHER"}</button></form>
         {error && <p className="inline-error">{error}</p>}
-        {observations.length > 0 && <><div className="feature-metrics"><div><span>OBSERVATIONS</span><strong>{observations.length}</strong></div><div><span>MIN TEMP</span><strong>{minimumTemperature}</strong></div><div><span>MAX TEMP</span><strong>{maximumTemperature}</strong></div><div><span>WET HOURS</span><strong>{wetHours}</strong></div></div><div className="weather-list">{observations.slice(0, 8).map((item) => <div key={item.observed_at}><span>{new Date(item.observed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC</span><strong>{valueOrDash(item.temperature_c, "°C")}</strong><small>{valueOrDash(item.precipitation_mm, " mm")}</small></div>)}</div></>}
+        {observations.length > 0 && <><div className="feature-metrics"><div><span>OBSERVATIONS</span><strong>{observations.length}</strong></div><div><span>MIN TEMP</span><strong>{minimumTemperature}</strong></div><div><span>MAX TEMP</span><strong>{maximumTemperature}</strong></div><div><span>WET HOURS</span><strong>{wetHours}</strong></div></div><div className="weather-list">{observations.map((item) => <div key={item.observed_at}><span>{new Date(item.observed_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC</span><strong>{valueOrDash(item.temperature_c, "°C")}</strong><small>{valueOrDash(item.precipitation_mm, " mm")}</small></div>)}</div></>}
       </article>
     </section>
   );
@@ -157,11 +171,12 @@ export function TracePanel({ trace, evaluations, capabilities }: { trace: Analys
     <section className="feature-grid trace-grid">
       <article className="feature-card panel">
         <div className="section-heading"><div><span>DETERMINISTIC TRACE</span><h1>Analysis provenance</h1></div><Bot /></div>
-        <dl className="trace-list"><div><dt>Driver / cutoff</dt><dd>{trace ? `${trace.driver_id} / L${trace.cutoff_lap}` : "—"}</dd></div><div><dt>Maximum source lap</dt><dd>{trace?.max_source_lap ?? "—"}</dd></div><div><dt>Snapshot hash</dt><dd className="hash">{trace?.snapshot_hash ?? "—"}</dd></div><div><dt>Tool sequence</dt><dd>{trace?.tool_sequence.join(" → ") ?? "—"}</dd></div><div><dt>LLM agent</dt><dd>{capabilities?.agent === "requires_key" ? "Optional key required" : "Ready"}</dd></div></dl>
+        <dl className="trace-list"><div><dt>Driver / cutoff</dt><dd>{trace ? `${trace.driver_id} / L${trace.cutoff_lap}` : "—"}</dd></div><div><dt>Maximum source lap</dt><dd>{trace?.max_source_lap ?? "—"}</dd></div><div><dt>Snapshot hash</dt><dd className="hash">{trace?.snapshot_hash ?? "—"}</dd></div><div><dt>Analysis steps</dt><dd>{trace?.tool_sequence.join(" → ") ?? "—"}</dd></div><div><dt>LLM agent</dt><dd>{!capabilities ? "Status unavailable" : capabilities.agent === "requires_key" ? "Optional key required" : "Configured"}</dd></div></dl>
+        <p className="feature-note">This is a deterministic analysis record. No language-model agent was run.</p>
       </article>
       <article className="feature-card panel">
         <div className="section-heading"><div><span>AUTOMATED CHECKS</span><h2>Historical replay evaluations</h2></div><ShieldCheck /></div>
-        <div className="evaluation-list">{evaluations.map((evaluation) => <div key={evaluation.name}>{evaluation.passed ? <CheckCircle2 /> : <XCircle />}<span><strong>{evaluation.name.replaceAll("_", " ")}</strong><small>{evaluation.detail}</small></span></div>)}</div>
+        <div className="evaluation-list">{!evaluations.length && <p className="feature-note">Evaluation results are unavailable.</p>}{evaluations.map((evaluation) => <div key={evaluation.name} className={evaluation.passed ? "passed" : "failed"}>{evaluation.passed ? <CheckCircle2 /> : <XCircle />}<span><strong>{evaluation.passed ? "PASS" : "FAIL"} · {evaluation.name.replaceAll("_", " ")}</strong><small>{evaluation.detail}</small></span></div>)}</div>
       </article>
     </section>
   );

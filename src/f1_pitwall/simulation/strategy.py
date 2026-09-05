@@ -31,9 +31,29 @@ class StrategyAdvisor:
         """Produce an auditable short-horizon comparison from visible evidence."""
         if horizon_laps < 3:
             raise ValueError("horizon_laps must be at least 3")
+        if pit_loss_ms <= 0 or out_lap_penalty_ms < 0:
+            raise ValueError("pit loss must be positive and out-lap penalty non-negative")
         trend = self._tyres.estimate(driver_id, snapshot.cutoff_lap)
         traffic = self._traffic.analyze(snapshot, driver_id, pit_loss_ms)
         warnings = list(snapshot.warnings)
+        remaining = snapshot.total_laps - snapshot.cutoff_lap
+        horizon_laps = min(horizon_laps, remaining)
+        if remaining < 3:
+            return StrategyAssessment(
+                session_id=snapshot.session_id,
+                cutoff_lap=snapshot.cutoff_lap,
+                driver_id=driver_id,
+                preferred_action=StrategyAction.NO_RECOMMENDATION,
+                confidence=0,
+                options=(),
+                evidence=(
+                    "Race complete."
+                    if remaining == 0
+                    else "Fewer than three laps remain; the pit-delay model is not applicable.",
+                ),
+                warnings=tuple(warnings),
+                max_source_lap=max(trend.max_source_lap, traffic.max_source_lap),
+            )
 
         if trend.pace_ms is None:
             warnings.append(
@@ -58,9 +78,9 @@ class StrategyAdvisor:
         degradation = max(0.0, trend.degradation_ms_per_lap or 0.0)
         fresh_pace = max(1, round(trend.pace_ms - degradation * max(1, trend.sample_count // 2)))
         current_next_lap = round(trend.pace_ms + degradation)
-        pit_next = pit_loss_ms + out_lap_penalty_ms + fresh_pace * (horizon_laps - 1)
+        pit_next = pit_loss_ms + out_lap_penalty_ms + fresh_pace * horizon_laps
         stay_then_pit = (
-            current_next_lap + pit_loss_ms + out_lap_penalty_ms + fresh_pace * (horizon_laps - 2)
+            current_next_lap + pit_loss_ms + out_lap_penalty_ms + fresh_pace * (horizon_laps - 1)
         )
         traffic_penalty = {
             TrafficRisk.HIGH: 2_000,
@@ -75,6 +95,8 @@ class StrategyAdvisor:
             f"Green-flag pit loss fixed at {pit_loss_ms / 1000:.1f}s.",
             f"Projection horizon is {horizon_laps} laps.",
             "No safety-car or weather transition is modeled.",
+            "Both options include a pit stop; staying out to the finish is not evaluated.",
+            "Fresh-tyre pace and delayed-stop traffic are assumptions, not observations.",
         )
         options = (
             StrategyOption(

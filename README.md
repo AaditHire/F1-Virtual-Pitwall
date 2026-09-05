@@ -49,7 +49,25 @@ agent endpoint returns `503`, while replay, analytics, MCP, and dashboard featur
 ## Quality checks
 
 Run `python -m pytest`, `python -m ruff check .`, `python -m ruff format --check .`, and
-`python -m mypy src tests`. In `frontend/`, run `npm run lint` and `npm run build`.
+`python -m mypy src tests`. In `frontend/`, run `npm test`, `npm run lint`, and `npm run build`.
+
+## Interpreting the dashboard
+
+The default session is synthetic and is labeled **Synthetic demo**. Set `PITWALL_FIXTURE_PATH`
+to an ingested race file and restart the API to replay that session. The Next.js server forwards
+requests through `PITWALL_API_URL` (default `http://127.0.0.1:8000`); this is a server environment
+variable, not a browser URL.
+
+Strategy compares two pit-stop timings over up to five remaining laps. It counts every projected
+lap and returns no recommendation with fewer than three laps remaining. Both options include a
+pit stop; the model does not yet optimize a complete race plan. Expand **Model assumptions** to
+inspect its limitations. The evidence score is a sample-availability heuristic, not a calibrated
+probability of success. Missing timing produces an unknown status rather than an inferred retirement.
+
+Weather is a separate, full-day archive explorer with editable coordinates and date. It is not
+fed into replay strategy. Agent tools enforce the requested lap in code; they cannot access later
+laps even if a prompt requests them. General historical knowledge inside an LLM remains a separate
+limitation when evaluating its explanations.
 
 See [the architecture](docs/architecture.md), [build brief](docs/build-brief.md), and
 [data-source policy](docs/data-sources.md). This project is licensed under MIT and is not affiliated

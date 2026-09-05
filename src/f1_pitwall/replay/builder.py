@@ -59,7 +59,16 @@ class ReplayBuilder:
             gap = self._gap(record, leader)
             interval = self._gap(record, ahead)
             completed_delta = cutoff_lap - record.lap_number
-            status = DriverStatus.RETIRED if completed_delta > 2 else DriverStatus.RUNNING
+            # Missing laps cannot establish a retirement without a status observation.
+            status = DriverStatus.UNKNOWN if completed_delta > 0 else DriverStatus.RUNNING
+            if completed_delta > 0:
+                warnings.append(
+                    DataQualityWarning(
+                        code="STALE_TIMING",
+                        message="Latest timing predates the cutoff; running status is unknown.",
+                        driver_id=record.driver_id,
+                    )
+                )
             if record.position is None or record.elapsed_time_ms is None:
                 warnings.append(
                     DataQualityWarning(

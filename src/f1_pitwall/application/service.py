@@ -46,7 +46,9 @@ class PitWallService:
     ) -> list[dict[str, object]]:
         """Return visible lap-time series for dashboard charts."""
         self._validate_cutoff(cutoff_lap)
-        selected = {driver.upper() for driver in driver_ids} if driver_ids else None
+        selected = {driver.strip().upper() for driver in driver_ids} if driver_ids else None
+        if selected and (unknown := selected - self.dataset.drivers.keys()):
+            raise ValueError(f"unknown drivers: {', '.join(sorted(unknown))}")
         return [
             {
                 "driver_id": lap.driver_id,
@@ -55,8 +57,12 @@ class PitWallService:
                 "compound": lap.compound,
                 "stint": lap.stint,
                 "source_lap": lap.source_lap,
+                "is_clean": lap.is_accurate
+                and not lap.pit_in
+                and not lap.pit_out
+                and lap.track_status in {"", "1"},
             }
-            for lap in self.dataset.laps
+            for lap in sorted(self.dataset.laps, key=lambda lap: (lap.lap_number, lap.driver_id))
             if lap.lap_number <= cutoff_lap
             and lap.lap_time_ms is not None
             and (selected is None or lap.driver_id in selected)

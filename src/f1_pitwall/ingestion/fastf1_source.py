@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,12 @@ def _compound(value: Any) -> Compound:
         return Compound.UNKNOWN
 
 
+def _text(value: Any, fallback: str) -> str:
+    if value is None or pd.isna(value) or not str(value).strip():
+        return fallback
+    return str(value).strip()
+
+
 class FastF1Source:
     """Download a completed session and normalize only fields V1 understands."""
 
@@ -46,13 +53,13 @@ class FastF1Source:
         drivers: dict[str, DriverInfo] = {}
         for driver_id in session.drivers:
             result = session.get_driver(driver_id)
-            abbreviation = str(result.get("Abbreviation") or driver_id)
-            team_color = str(result.get("TeamColor") or "777777").lstrip("#")[:6]
+            abbreviation = _text(result.get("Abbreviation"), str(driver_id))
+            team_color = _text(result.get("TeamColor"), "777777").lstrip("#")
             drivers[abbreviation] = DriverInfo(
                 driver_id=abbreviation,
-                full_name=str(result.get("FullName") or abbreviation),
-                team_name=str(result.get("TeamName") or "Unknown"),
-                team_color=team_color if len(team_color) == 6 else "777777",
+                full_name=_text(result.get("FullName"), abbreviation),
+                team_name=_text(result.get("TeamName"), "Unknown"),
+                team_color=team_color if re.fullmatch(r"[0-9A-Fa-f]{6}", team_color) else "777777",
             )
 
         records: list[LapRecord] = []
@@ -74,23 +81,27 @@ class FastF1Source:
                     stint=_integer(row.get("Stint")),
                     pit_in=not pd.isna(row.get("PitInTime")),
                     pit_out=not pd.isna(row.get("PitOutTime")),
-                    track_status=str(row.get("TrackStatus") or ""),
-                    is_accurate=bool(row.get("IsAccurate", False)),
+                    track_status=_text(row.get("TrackStatus"), ""),
+                    is_accurate=False
+                    if pd.isna(row.get("IsAccurate"))
+                    else bool(row.get("IsAccurate", False)),
                 )
             )
 
+        if not records:
+            raise ValueError("The selected session has no usable completed lap records.")
         total_laps = max(record.lap_number for record in records)
         event_data = session.event
         event_slug = str(event_data.get("EventName", event)).upper().replace(" ", "-")
         metadata = RaceMetadata(
-            session_id=f"{year}-{event_slug}-R",
+            session_id=f"{year}-{event_slug}-{session_name}",
             year=year,
             event_name=str(event_data.get("EventName") or event),
             country=str(event_data.get("Country") or "Unknown"),
             circuit=str(event_data.get("Location") or "Unknown"),
             total_laps=total_laps,
             source=f"FastF1 {fastf1.__version__}",
-            data_version=f"fastf1-{fastf1.__version__}-{year}-{event}-R-v1",
+            data_version=f"fastf1-{fastf1.__version__}-{year}-{event}-{session_name}-v1",
         )
         return RaceDataset(
             metadata=metadata,

@@ -1,5 +1,6 @@
 """Deterministic baseline classification for radio transcripts."""
 
+import re
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict
@@ -27,21 +28,30 @@ class RadioSignal(BaseModel):
 
 
 _TERMS: dict[RadioCategory, tuple[str, ...]] = {
-    RadioCategory.TYRES: ("tyre", "tire", "graining", "deg", "degradation", "sliding"),
+    RadioCategory.TYRES: (
+        "tyre",
+        "tyres",
+        "tire",
+        "tires",
+        "graining",
+        "deg",
+        "degradation",
+        "sliding",
+    ),
     RadioCategory.TRAFFIC: ("traffic", "gap", "drs", "blue flag", "car ahead"),
     RadioCategory.STRATEGY: ("box", "pit", "stay out", "undercut", "overcut", "plan"),
-    RadioCategory.WEATHER: ("rain", "wet", "weather", "drops", "inter"),
-    RadioCategory.RELIABILITY: ("engine", "brake", "power", "gearbox", "temperature"),
+    RadioCategory.WEATHER: ("rain", "wet", "weather", "drops", "inter", "inters", "intermediate"),
+    RadioCategory.RELIABILITY: ("engine", "brake", "brakes", "power", "gearbox", "temperature"),
 }
 
 
 def classify_radio(text: str) -> RadioSignal:
     """Classify transcript text without an external model or network call."""
-    normalized = text.casefold()
+    normalized = " ".join(text.casefold().split())
     categories: list[RadioCategory] = []
     matches: list[str] = []
     for category, terms in _TERMS.items():
-        matched = [term for term in terms if term in normalized]
+        matched = [term for term in terms if re.search(r"\b" + re.escape(term) + r"\b", normalized)]
         if matched:
             categories.append(category)
             matches.extend(matched)

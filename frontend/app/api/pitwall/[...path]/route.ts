@@ -4,10 +4,12 @@ const backend = process.env.PITWALL_API_URL ?? "http://127.0.0.1:8000";
 
 async function proxy(request: NextRequest, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
-  const target = new URL(path.join("/"), `${backend.replace(/\/$/, "")}/`);
-  target.search = request.nextUrl.search;
-
   try {
+    if (path[0] !== "api" || path[1] !== "v1" || path.some((part) => !/^[a-zA-Z0-9_-]+$/.test(part))) {
+      return NextResponse.json({ detail: "Unknown API route" }, { status: 404 });
+    }
+    const target = new URL(path.join("/"), `${backend.replace(/\/$/, "")}/`);
+    target.search = request.nextUrl.search;
     const body = request.method === "GET" ? undefined : await request.text();
     const upstream = await fetch(target, {
       method: request.method,
@@ -17,11 +19,13 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
         ...(body ? { "content-type": request.headers.get("content-type") ?? "application/json" } : {}),
       },
       cache: "no-store",
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]),
     });
     return new NextResponse(await upstream.text(), {
       status: upstream.status,
       headers: {
         "content-type": upstream.headers.get("content-type") ?? "application/json",
+        "cache-control": "no-store",
         ...(upstream.headers.get("x-request-id")
           ? { "x-request-id": upstream.headers.get("x-request-id")! }
           : {}),

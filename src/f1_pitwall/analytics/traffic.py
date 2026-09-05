@@ -14,19 +14,28 @@ class TrafficAnalyzer:
         proximity_ms: int = 3_000,
     ) -> TrafficAnalysis:
         """Return predicted position and nearby cars without mutating race state."""
+        if pit_loss_ms <= 0 or proximity_ms < 0:
+            raise ValueError("pit loss must be positive and proximity non-negative")
         target = next(
             (driver for driver in snapshot.drivers if driver.driver_id == driver_id), None
         )
         if target is None:
             raise ValueError(f"driver {driver_id} is not present in the snapshot")
-        if target.gap_to_leader_ms is None:
+        if (
+            target.gap_to_leader_ms is None
+            or any(
+                driver.gap_to_leader_ms is None or driver.max_source_lap < snapshot.cutoff_lap
+                for driver in snapshot.drivers
+            )
+            or any(warning.code == "NO_VISIBLE_LAP" for warning in snapshot.warnings)
+        ):
             return TrafficAnalysis(
                 driver_id=driver_id,
                 assumed_pit_loss_ms=pit_loss_ms,
                 predicted_rejoin_position=None,
                 nearby_driver_ids=(),
                 risk=TrafficRisk.UNKNOWN,
-                max_source_lap=target.max_source_lap,
+                max_source_lap=max(driver.max_source_lap for driver in snapshot.drivers),
             )
 
         projected_gap = target.gap_to_leader_ms + pit_loss_ms

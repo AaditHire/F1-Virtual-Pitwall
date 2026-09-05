@@ -32,14 +32,22 @@ async def get_agent_advice(
             "Install the optional integration with: pip install -e '.[agents]'"
         ) from error
 
+    service.snapshot(lap)
+
+    def validate_tool_cutoff(cutoff_lap: int) -> None:
+        if not 1 <= cutoff_lap <= lap:
+            raise ValueError(f"Tool cutoff must be between 1 and the authorized lap {lap}.")
+
     @sdk.function_tool  # type: ignore[untyped-decorator]
     def get_race_state(cutoff_lap: int) -> str:
         """Return cutoff-safe race state as JSON."""
+        validate_tool_cutoff(cutoff_lap)
         return service.snapshot(cutoff_lap).model_dump_json()
 
     @sdk.function_tool  # type: ignore[untyped-decorator]
     def compare_strategy(cutoff_lap: int, target_driver: str) -> str:
         """Return deterministic pit-versus-stay-out analysis as JSON."""
+        validate_tool_cutoff(cutoff_lap)
         return service.strategy(cutoff_lap, target_driver).model_dump_json()
 
     model = os.getenv("OPENAI_MODEL", "gpt-5-mini")

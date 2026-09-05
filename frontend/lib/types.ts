@@ -41,6 +41,9 @@ export type StrategyOption = {
 };
 
 export type Strategy = {
+  driver_id: string;
+  cutoff_lap: number;
+  warnings: { code: string; message: string; driver_id: string | null }[];
   preferred_action: string;
   confidence: number;
   evidence: string[];
@@ -48,6 +51,7 @@ export type Strategy = {
 };
 
 export type LapTime = {
+  is_clean: boolean;
   driver_id: string;
   lap_number: number;
   lap_time_ms: number;
