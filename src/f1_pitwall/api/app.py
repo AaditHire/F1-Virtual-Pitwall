@@ -78,8 +78,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 },
             },
         )
+        cache_root = Path("/tmp/pitwall") if os.getenv("VERCEL") else Path("data/cache")
         app.state.intelligence = IntelligenceService(
-            provider, FastF1Source(Path("data/cache/fastf1"))
+            provider, FastF1Source(cache_root / "fastf1")
         )
         app.state.news = news
         try:
